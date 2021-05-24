@@ -99,7 +99,7 @@ def save_course(soup):
     print("Parsing links in file...")
     for link in tqdm(all_links):
         try:
-            if "/resource/" in link.get('href'):
+            if "/resource/" in link.get('href') or "/page/" in link.get('href'):
                 resource_links.append(link)
         except TypeError:
             # The link has no destination, ignore it
@@ -125,7 +125,8 @@ def save_course(soup):
             "vnd.ms-powerpoint": "ppt",
             "vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
             "vnd.ms-excel": "xls",
-            "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx"
+            "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+            "html; charset=utf-8": "html"
         }
 
         if ext in mimetypes.keys():
