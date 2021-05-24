@@ -1,0 +1,5 @@
+parameters.py
+__pycache__/
+.venv/
+.vscode/
+output.html
