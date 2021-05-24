@@ -8,7 +8,7 @@ import io
 import os
 import re
 import shutil
-from typing import Type
+import urllib.parse
 
 import requests
 from bs4 import BeautifulSoup
@@ -105,10 +105,23 @@ def save_course(soup):
             # The link has no destination, ignore it
             pass
 
-    print("")
-    print(f"Found {len(resource_links)} resources to fetch!")
+    # Now do the same for inline images
+    all_images = soup.find_all('img')
+    resource_images = []
 
-    print("Downloading resources...")
+    for img in tqdm(all_images):
+        try:
+            if os.path.splitext(img.get('src'))[1] in [".jpg", ".jpeg", ".png", ".webp", ".svg", ".bmp", ".tif", ".tiff", ".gif"]:
+                resource_images.append(img)
+        except TypeError:
+            # The image is invalid, ignore it
+            pass
+
+    print("")
+    print(
+        f"Found {len(resource_links) + len(resource_images)} resources to fetch!")
+
+    print("Downloading external links...")
     for resource in tqdm(resource_links):
         url = resource.get('href')
         file_id = re.search(r"id=(\d+)", url)[1]
@@ -140,6 +153,25 @@ def save_course(soup):
                 f.write(chunk)
 
         resource.attrs['href'] = new_path
+
+    print("Downloading inline images...")
+    for resource in tqdm(resource_images):
+        if resource.get('src').startswith("https:"):
+            url = resource.get('src')
+        else:
+            url = "https:" + resource.get('src')
+        filename = urllib.parse.unquote(url.split('/')[-1])
+
+        r = a.s.get(url)
+
+        new_path = os.path.join("resources", filename)
+
+        # Open the file to write as binary - replace 'wb' with 'w' for text files
+        with io.open(os.path.join(course_path, new_path), 'wb') as f:
+            for chunk in r.iter_content(1024):
+                f.write(chunk)
+
+        resource.attrs['src'] = "resources/" + filename
 
     save_soup(soup, os.path.join(course_path, f"{course_title}.html"))
 
