@@ -71,7 +71,7 @@ def save_course(soup):
     """
     Parses and saves the course to its own subfolder.
     """
-    page_title = soup.title.string
+    page_title = soup.title.string.strip()
     course_title = re.search(r"Course: ([\w\W]+)", page_title)[1]
     course_path = os.path.join("output", course_title)
 
@@ -142,6 +142,7 @@ def save_course(soup):
             "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
             "html; charset=utf-8": "html",
             "x-ms-wmv": "wmv",
+            "x-ms-wm": "avi",
             "quicktime": "mov"
         }
 
