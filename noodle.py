@@ -137,9 +137,12 @@ def save_course(soup):
             "vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
             "vnd.ms-powerpoint": "ppt",
             "vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+            "vnd.openxmlformats-officedocument.presentationml.slideshow": "pptx"
             "vnd.ms-excel": "xls",
             "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-            "html; charset=utf-8": "html"
+            "html; charset=utf-8": "html",
+            "x-ms-wmv": "wmv",
+            "quicktime": "mov"
         }
 
         if ext in mimetypes.keys():
