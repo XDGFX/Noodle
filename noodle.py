@@ -160,7 +160,7 @@ def save_course(soup):
 
     print("Downloading inline images...")
     for resource in tqdm(resource_images):
-        if resource.get('src').startswith("https:"):
+        if resource.get('src').startswith("https:") or resource.get('src').startswith("http:"):
             url = resource.get('src')
         else:
             url = "https:" + resource.get('src')
