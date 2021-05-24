@@ -3,7 +3,8 @@ Fill out this file with the correct parameters, and copy to parameters.py
 """
 
 # Authentication URL; where your browser goes when you click 'Sign In' on Moodle
-url = "https://auth.example.ac.uk/login"
+url_auth = "https://auth.example.ac.uk/login"
+url_moodle = "https://moodle-archive-2018-19.example.ac.uk"
 
 # Your auth username
 username = ""
