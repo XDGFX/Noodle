@@ -4,6 +4,7 @@ Noodle
 Create clones of Moodle environments with all resources for archival purposes.
 """
 
+import io
 import os
 import re
 import shutil
@@ -34,7 +35,8 @@ class Auth():
             "Content-Type": "application/x-www-form-urlencoded"
         }
 
-        r = self.s.post(url=parameters.url_auth, data=payload, headers=headers)
+        r = self.s.post(url=parameters.url_auth, data=payload,
+                        headers=headers, verify=False)
 
 
 a = Auth()
@@ -132,7 +134,7 @@ def save_course(soup):
         new_path = os.path.join("resources", f"{file_id}.{ext}")
 
         # Open the file to write as binary - replace 'wb' with 'w' for text files
-        with open(os.path.join(course_path, new_path), 'wb') as f:
+        with io.open(os.path.join(course_path, new_path), 'wb', encoding="utf-8") as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
 
@@ -142,7 +144,7 @@ def save_course(soup):
 
 
 def save_soup(soup, filename):
-    with open(filename, 'w') as f:
+    with io.open(filename, 'w', encoding="utf-8") as f:
         f.write(soup.prettify())
 
 
