@@ -134,7 +134,7 @@ def save_course(soup):
         new_path = os.path.join("resources", f"{file_id}.{ext}")
 
         # Open the file to write as binary - replace 'wb' with 'w' for text files
-        with io.open(os.path.join(course_path, new_path), 'wb', encoding="utf-8") as f:
+        with io.open(os.path.join(course_path, new_path), 'wb') as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
 
