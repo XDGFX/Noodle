@@ -8,9 +8,7 @@ import io
 import os
 import re
 import shutil
-import unicodedata
-import urllib.parse
-import uuid
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -114,37 +112,29 @@ def save_course(soup):
     all_images = soup.find_all('img')
     resource_images = all_images
 
-    # for img in tqdm(all_images):
-    #     try:
-    #         if os.path.splitext(img.get('src'))[1] in [".jpg", ".jpeg", ".png", ".webp", ".svg", ".bmp", ".tif", ".tiff", ".gif"]:
-    #             resource_images.append(img)
-    #     except TypeError:
-    #         # The image is invalid, ignore it
-    #         pass
-
     print("")
     print(
         f"Found {len(resource_links)} resources and {len(resource_images)} images to fetch!")
 
     print("Downloading external links...")
-    # for resource in tqdm(resource_links):
-    #     url = resource.get('href')
-    #     file_id = re.search(r"id=(\d+)", url)[1]
+    for resource in tqdm(resource_links):
+        url = resource.get('href')
+        file_id = re.search(r"id=(\d+)", url)[1]
 
-    #     r = a.s.get(url)
+        r = a.s.get(url)
 
-    #     # Converts response headers mime type to an extension (may not work with everything)
-    #     ext = r.headers['content-type'].split('/')[-1]
-    #     ext = correct_extension_mimetype(ext)
+        # Converts response headers mime type to an extension (may not work with everything)
+        ext = r.headers['content-type'].split('/')[-1]
+        ext = correct_extension_mimetype(ext)
 
-    #     new_path = os.path.join("resources", f"{file_id}.{ext}")
+        new_path = os.path.join("resources", f"{file_id}.{ext}")
 
-    #     # Open the file to write as binary - replace 'wb' with 'w' for text files
-    #     with io.open(os.path.join(course_path, new_path), 'wb') as f:
-    #         for chunk in r.iter_content(1024):
-    #             f.write(chunk)
+        # Open the file to write as binary - replace 'wb' with 'w' for text files
+        with io.open(os.path.join(course_path, new_path), 'wb') as f:
+            for chunk in r.iter_content(1024):
+                f.write(chunk)
 
-    #     resource.attrs['href'] = new_path
+        resource.attrs['href'] = new_path
 
     print("Downloading inline images...")
     for resource in tqdm(resource_images):
@@ -162,6 +152,7 @@ def save_course(soup):
 
         if filename is None:
             from uuid import uuid4
+
             # Converts response headers mime type to an extension (may not work with everything)
             ext = r.headers['content-type'].split('/')[-1]
             ext = correct_extension_mimetype(ext)
@@ -171,11 +162,74 @@ def save_course(soup):
         new_path = os.path.join("img", filename)
 
         # Open the file to write as binary - replace 'wb' with 'w' for text files
-        with io.open(os.path.join(course_path, new_path), 'wb') as f:
-            for chunk in r.iter_content(1024):
-                f.write(chunk)
+        if not os.path.exists(os.path.join(course_path, new_path)):
+            with io.open(os.path.join(course_path, new_path), 'wb') as f:
+                for chunk in r.iter_content(1024):
+                    f.write(chunk)
 
         resource.attrs['src'] = "img/" + filename
+
+    print("Getting remaining resources (CSS, favicon etc)")
+
+    # Download favicon
+    icon_link = soup.find("link", rel="shortcut icon")
+    r = a.s.get(icon_link['href'])
+    path = os.path.join("img", "favicon.ico")
+    with io.open(os.path.join(course_path, path), 'wb') as f:
+        for chunk in r.iter_content(1024):
+            f.write(chunk)
+
+    icon_link['href'] = "img/favicon.ico"
+
+    # Get JS files
+    for resource in soup.find_all("script"):
+        if resource.attrs.get("src"):
+            # if the tag has the attribute 'src'
+            url = urljoin(url, resource.attrs.get("src"))
+
+            r = a.s.get(url)
+
+            # Try to get the filename from response headers
+            filename = get_filename_from_cd(
+                r.headers.get('content-disposition'))
+
+            if filename is None:
+                from uuid import uuid4
+                filename = str(uuid4()) + ".js"
+
+            new_path = os.path.join("js", filename)
+
+            # Open the file to write as binary - replace 'wb' with 'w' for text files
+            if not os.path.exists(os.path.join(course_path, new_path)):
+                with io.open(os.path.join(course_path, new_path), 'wb') as f:
+                    for chunk in r.iter_content(1024):
+                        f.write(chunk)
+
+            resource.attrs['src'] = "js/" + filename
+
+    # Get CSS files
+    for resource in soup.find_all("link"):
+        if resource.attrs.get("href"):
+            # if the link tag has the 'href' attribute
+            url = urljoin(url, resource.attrs.get("href"))
+
+            r = a.s.get(url)
+
+            if r.status_code is not 200:
+                continue
+
+            from uuid import uuid4
+            filename = str(uuid4()) + ".css"
+
+            new_path = os.path.join("css", filename)
+
+            # Open the file to write as binary - replace 'wb' with 'w' for text files
+            if not os.path.exists(os.path.join(course_path, new_path)):
+                with io.open(os.path.join(course_path, new_path), 'wb') as f:
+                    for chunk in r.iter_content(1024):
+                        f.write(chunk)
+
+            resource.attrs['href'] = "css/" + filename
 
     save_soup(soup, os.path.join(course_path, f"{course_title}.html"))
 
