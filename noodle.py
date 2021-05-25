@@ -8,6 +8,7 @@ import io
 import os
 import re
 import shutil
+import unicodedata
 import urllib.parse
 
 import requests
@@ -87,6 +88,9 @@ def save_course(soup):
 
     # Create the folder
     os.makedirs(os.path.join(course_path, "resources"))
+    os.makedirs(os.path.join(course_path, "img"))
+    os.makedirs(os.path.join(course_path, "css"))
+    os.makedirs(os.path.join(course_path, "js"))
 
     # Save the raw course page for checking
     save_soup(soup, os.path.join(
@@ -107,56 +111,39 @@ def save_course(soup):
 
     # Now do the same for inline images
     all_images = soup.find_all('img')
-    resource_images = []
+    resource_images = all_images
 
-    for img in tqdm(all_images):
-        try:
-            if os.path.splitext(img.get('src'))[1] in [".jpg", ".jpeg", ".png", ".webp", ".svg", ".bmp", ".tif", ".tiff", ".gif"]:
-                resource_images.append(img)
-        except TypeError:
-            # The image is invalid, ignore it
-            pass
+    # for img in tqdm(all_images):
+    #     try:
+    #         if os.path.splitext(img.get('src'))[1] in [".jpg", ".jpeg", ".png", ".webp", ".svg", ".bmp", ".tif", ".tiff", ".gif"]:
+    #             resource_images.append(img)
+    #     except TypeError:
+    #         # The image is invalid, ignore it
+    #         pass
 
     print("")
     print(
-        f"Found {len(resource_links) + len(resource_images)} resources to fetch!")
+        f"Found {len(resource_links)} resources and {len(resource_images)} images to fetch!")
 
     print("Downloading external links...")
-    for resource in tqdm(resource_links):
-        url = resource.get('href')
-        file_id = re.search(r"id=(\d+)", url)[1]
+    # for resource in tqdm(resource_links):
+    #     url = resource.get('href')
+    #     file_id = re.search(r"id=(\d+)", url)[1]
 
-        r = a.s.get(url)
+    #     r = a.s.get(url)
 
-        # Converts response headers mime type to an extension (may not work with everything)
-        ext = r.headers['content-type'].split('/')[-1]
+    #     # Converts response headers mime type to an extension (may not work with everything)
+    #     ext = r.headers['content-type'].split('/')[-1]
+    #     ext = correct_extension_mimetype(ext)
 
-        # Checks for known extension errors
-        mimetypes = {
-            "msword": "doc",
-            "vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-            "vnd.ms-powerpoint": "ppt",
-            "vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
-            "vnd.openxmlformats-officedocument.presentationml.slideshow": "pptx",
-            "vnd.ms-excel": "xls",
-            "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-            "html; charset=utf-8": "html",
-            "x-ms-wmv": "wmv",
-            "x-ms-wm": "avi",
-            "quicktime": "mov"
-        }
+    #     new_path = os.path.join("resources", f"{file_id}.{ext}")
 
-        if ext in mimetypes.keys():
-            ext = mimetypes[ext]
+    #     # Open the file to write as binary - replace 'wb' with 'w' for text files
+    #     with io.open(os.path.join(course_path, new_path), 'wb') as f:
+    #         for chunk in r.iter_content(1024):
+    #             f.write(chunk)
 
-        new_path = os.path.join("resources", f"{file_id}.{ext}")
-
-        # Open the file to write as binary - replace 'wb' with 'w' for text files
-        with io.open(os.path.join(course_path, new_path), 'wb') as f:
-            for chunk in r.iter_content(1024):
-                f.write(chunk)
-
-        resource.attrs['href'] = new_path
+    #     resource.attrs['href'] = new_path
 
     print("Downloading inline images...")
     for resource in tqdm(resource_images):
@@ -164,20 +151,66 @@ def save_course(soup):
             url = resource.get('src')
         else:
             url = "https:" + resource.get('src')
-        filename = urllib.parse.unquote(url.split('/')[-1])
 
         r = a.s.get(url)
 
-        new_path = os.path.join("resources", filename)
+        filename = get_filename_from_cd(r.headers.get('content-disposition'))
+
+        if filename is None:
+            # Converts response headers mime type to an extension (may not work with everything)
+            ext = r.headers['content-type'].split('/')[-1]
+            ext = correct_extension_mimetype(ext)
+
+            path = urllib.parse.urlsplit(url).path.split('/')[-1]
+
+            filename = path + "." + ext
+
+        new_path = os.path.join("img", filename)
 
         # Open the file to write as binary - replace 'wb' with 'w' for text files
         with io.open(os.path.join(course_path, new_path), 'wb') as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
 
-        resource.attrs['src'] = "resources/" + filename
+        resource.attrs['src'] = "img/" + filename
 
     save_soup(soup, os.path.join(course_path, f"{course_title}.html"))
+
+
+def get_filename_from_cd(cd):
+    """
+    Get filename from content-disposition
+    """
+    if not cd:
+        return None
+    fname = re.findall('filename=(.+)', cd)
+    if len(fname) == 0:
+        return None
+    return fname[0]
+
+
+def correct_extension_mimetype(ext):
+    """
+    Checks for known extension errors
+    """
+    mimetypes = {
+        "msword": "doc",
+        "vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+        "vnd.ms-powerpoint": "ppt",
+        "vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+        "vnd.openxmlformats-officedocument.presentationml.slideshow": "pptx",
+        "vnd.ms-excel": "xls",
+        "vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+        "html; charset=utf-8": "html",
+        "x-ms-wmv": "wmv",
+        "x-ms-wm": "avi",
+        "quicktime": "mov"
+    }
+
+    if ext in mimetypes.keys():
+        ext = mimetypes[ext]
+
+        return ext
 
 
 def save_soup(soup, filename):
