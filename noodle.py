@@ -85,10 +85,10 @@ def save_page(soup, subdir=""):
         course_title = re.search(r"Topic: ([\w\W]+)", page_title)[1]
         course_path = os.path.join("output", subdir, "resources", course_title)
 
-    course_path = re.sub(r"[~#%&*{}/:<>?|\"-]", "", course_path)
+    course_path = re.sub(r"[~#%&*{}:<>?|\"-]", "", course_path)
     course_path = re.sub(r" +", " ", course_path)
 
-    course_title = re.sub(r"[~#%&*{}/:<>?|\"-]", "", course_title)
+    course_title = re.sub(r"[~#%&*{}:<>?|\"-]", "", course_title)
     course_title = re.sub(r" +", " ", course_title)
 
     print(f"Found course: {course_title}")
