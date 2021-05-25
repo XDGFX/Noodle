@@ -8,11 +8,12 @@ import io
 import os
 import re
 import shutil
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from urllib3.exceptions import InsecureRequestWarning
 
 import parameters
 
@@ -35,6 +36,10 @@ class Auth():
             "Content-Type": "application/x-www-form-urlencoded"
         }
 
+        # Suppress only the single warning from urllib3 needed.
+        requests.packages.urllib3.disable_warnings(
+            category=InsecureRequestWarning)
+
         r = self.s.post(url=parameters.url_auth, data=payload,
                         headers=headers, verify=False)
 
@@ -42,15 +47,15 @@ class Auth():
 a = Auth()
 
 
-def test_course():
+def fetch_course(course_id, section=""):
     """
     Tests a provided course ID to ensure the user has access
     """
-    course_id = parameters.course_id
 
     url = parameters.url_moodle + "/course/view.php"
     params = {
-        "id": course_id
+        "id": course_id,
+        "section": section
     }
 
     r = a.s.get(url, params=params)
@@ -67,17 +72,28 @@ def test_course():
         return soup
 
 
-def save_course(soup):
+def save_page(soup, subdir=""):
     """
     Parses and saves the course to its own subfolder.
     """
     page_title = soup.title.string.strip()
-    course_title = re.search(r"Course: ([\w\W]+)", page_title)[1]
-    course_path = os.path.join("output", course_title)
+
+    if not subdir:
+        course_title = re.search(r"Course: ([\w\W]+)", page_title)[1]
+        course_path = os.path.join("output", course_title)
+    else:
+        course_title = re.search(r"Topic: ([\w\W]+)", page_title)[1]
+        course_path = os.path.join("output", subdir, "resources", course_title)
+
+    course_path = re.sub(r"[~#%&*{}/:<>?|\"-]", "", course_path)
+    course_path = re.sub(r" +", " ", course_path)
+
+    course_title = re.sub(r"[~#%&*{}/:<>?|\"-]", "", course_title)
+    course_title = re.sub(r" +", " ", course_title)
 
     print(f"Found course: {course_title}")
 
-    # If the folder already exists, don't overwrite
+    # If the folder already exists, overwrite
     if os.path.exists(course_path):
         # raise Exception(
         #     "The course already exists in the output dir! Delete this first.")
@@ -93,7 +109,7 @@ def save_course(soup):
 
     # Save the raw course page for checking
     save_soup(soup, os.path.join(
-        "output", course_title, "resources", "index_raw.html"))
+        course_path, "resources", "index_raw.html"))
 
     # Select all links, and filter to only include links to a /resource/ suburl
     all_links = soup.find_all('a')
@@ -102,7 +118,7 @@ def save_course(soup):
     print("Parsing links in file...")
     for link in tqdm(all_links):
         try:
-            if "/resource/" in link.get('href') or "/page/" in link.get('href'):
+            if re.search(r"/resource/|/page/|course[\w\W]+section=\d+", link.get('href')):
                 resource_links.append(link)
         except TypeError:
             # The link has no destination, ignore it
@@ -119,22 +135,49 @@ def save_course(soup):
     print("Downloading external links...")
     for resource in tqdm(resource_links):
         url = resource.get('href')
-        file_id = re.search(r"id=(\d+)", url)[1]
 
-        r = a.s.get(url)
+        # Check if a subpage instead of a normal file (only recurse once)
+        is_section = re.search(r"course[\w\W]+section=\d+", url)
 
-        # Converts response headers mime type to an extension (may not work with everything)
-        ext = r.headers['content-type'].split('/')[-1]
-        ext = correct_extension_mimetype(ext)
+        if subdir or not is_section:
+            file_id = re.search(r"id=(\d+)", url)[1]
 
-        new_path = os.path.join("resources", f"{file_id}.{ext}")
+            r = a.s.get(url)
 
-        # Open the file to write as binary - replace 'wb' with 'w' for text files
-        with io.open(os.path.join(course_path, new_path), 'wb') as f:
-            for chunk in r.iter_content(1024):
-                f.write(chunk)
+            # Converts response headers mime type to an extension (may not work with everything)
+            ext = r.headers['content-type'].split('/')[-1]
+            ext = correct_extension_mimetype(ext)
 
-        resource.attrs['href'] = new_path
+            new_path = os.path.join("resources", f"{file_id}.{ext}")
+
+            # Open the file to write as binary - replace 'wb' with 'w' for text files
+            success = False
+            while not success:
+                try:
+                    with io.open(os.path.join(course_path, new_path), 'wb') as f:
+                        for chunk in r.iter_content(1024):
+                            f.write(chunk)
+                    success = True
+
+                except PermissionError:
+                    import time
+                    time.sleep(1)
+
+            resource.attrs['href'] = new_path
+
+        # Recurse to download new page
+        else:
+            q = urlparse(url).query
+            q_id = re.search(r"id=(\d+)", q)[1]
+            q_section = re.search(r"section=(\d+)", q)[1]
+
+            sub_soup = fetch_course(q_id, q_section)
+            sub_page_title = save_page(
+                sub_soup, subdir=os.path.join(course_title))
+
+            sub_path = os.path.join(
+                "resources", sub_page_title, f"{sub_page_title}.html")
+            resource.attrs['href'] = sub_path
 
     print("Downloading inline images...")
     for resource in tqdm(resource_images):
@@ -258,6 +301,8 @@ def save_course(soup):
 
     save_soup(soup, os.path.join(course_path, f"{course_title}.html"))
 
+    return course_title
+
 
 def get_filename_from_cd(cd):
     """
@@ -305,10 +350,14 @@ if __name__ == "__main__":
     # Login and save cookies to session
     a.login()
 
-    # Check that the course does not give an error
-    index_soup = test_course()
+    if not isinstance(parameters.course_id, list):
+        parameters.course_id = [parameters.course_id]
 
-    # Parse and save the main course page
-    save_course(index_soup)
+    # Check that the course does not give an error
+    for course in tqdm(parameters.course_id):
+        index_soup = fetch_course(course)
+
+        # Parse and save the main course page
+        save_page(index_soup)
 
     print("Complete!")
