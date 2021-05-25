@@ -10,6 +10,7 @@ import re
 import shutil
 import unicodedata
 import urllib.parse
+import uuid
 
 import requests
 from bs4 import BeautifulSoup
@@ -147,6 +148,8 @@ def save_course(soup):
 
     print("Downloading inline images...")
     for resource in tqdm(resource_images):
+
+        # Fix for url schema
         if resource.get('src').startswith("https:") or resource.get('src').startswith("http:"):
             url = resource.get('src')
         else:
@@ -154,16 +157,16 @@ def save_course(soup):
 
         r = a.s.get(url)
 
+        # Try to get the filename from response headers
         filename = get_filename_from_cd(r.headers.get('content-disposition'))
 
         if filename is None:
+            from uuid import uuid4
             # Converts response headers mime type to an extension (may not work with everything)
             ext = r.headers['content-type'].split('/')[-1]
             ext = correct_extension_mimetype(ext)
 
-            path = urllib.parse.urlsplit(url).path.split('/')[-1]
-
-            filename = path + "." + ext
+            filename = str(uuid4()) + "." + ext
 
         new_path = os.path.join("img", filename)
 
@@ -186,7 +189,7 @@ def get_filename_from_cd(cd):
     fname = re.findall('filename=(.+)', cd)
     if len(fname) == 0:
         return None
-    return fname[0]
+    return fname[0].strip('"')
 
 
 def correct_extension_mimetype(ext):
@@ -210,7 +213,7 @@ def correct_extension_mimetype(ext):
     if ext in mimetypes.keys():
         ext = mimetypes[ext]
 
-        return ext
+    return ext
 
 
 def save_soup(soup, filename):
