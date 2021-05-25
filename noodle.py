@@ -93,13 +93,15 @@ def save_page(soup, subdir=""):
 
     print(f"Found course: {course_title}")
 
-    # If the folder already exists, overwrite
+    # Only overwrite if no subdir
     if os.path.exists(course_path):
-        # raise Exception(
-        #     "The course already exists in the output dir! Delete this first.")
-        print("Course folder already found: recreating...")
-        print("")
-        shutil.rmtree(course_path)
+        if not subdir:
+            print("Course folder already found: recreating...")
+            print("")
+            shutil.rmtree(course_path)
+        else:
+            print(f"Subdir already exists: {course_path}")
+            return course_title
 
     # Create the folder
     os.makedirs(os.path.join(course_path, "resources"))
