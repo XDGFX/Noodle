@@ -139,16 +139,36 @@ def save_course(soup):
     print("Downloading inline images...")
     for resource in tqdm(resource_images):
 
+        skip_request = False
+
         # Fix for url schema
-        if resource.get('src').startswith("https:") or resource.get('src').startswith("http:"):
+        if resource.get('src').startswith("data:"):
+            # Source contains image data, no need to make request
+            data = resource.get('src')
+            skip_request = True
+
+        elif resource.get('src').startswith("https:") or resource.get('src').startswith("http:"):
             url = resource.get('src')
+
         else:
             url = "https:" + resource.get('src')
 
-        r = a.s.get(url)
+        if not skip_request:
+            r = a.s.get(url)
 
-        # Try to get the filename from response headers
-        filename = get_filename_from_cd(r.headers.get('content-disposition'))
+            # Try to get the filename from response headers
+            filename = get_filename_from_cd(
+                r.headers.get('content-disposition'))
+
+        if skip_request:
+            from binascii import a2b_base64
+
+            data_separate = data.split(',')
+            binary_data = a2b_base64(data_separate[1])
+            ext = re.search(r"image/(\w+);", data_separate[0])[1]
+
+            from uuid import uuid4
+            filename = str(uuid4()) + "." + ext
 
         if filename is None:
             from uuid import uuid4
@@ -164,8 +184,13 @@ def save_course(soup):
         # Open the file to write as binary - replace 'wb' with 'w' for text files
         if not os.path.exists(os.path.join(course_path, new_path)):
             with io.open(os.path.join(course_path, new_path), 'wb') as f:
-                for chunk in r.iter_content(1024):
-                    f.write(chunk)
+
+                if not skip_request:
+                    for chunk in r.iter_content(1024):
+                        f.write(chunk)
+
+                else:
+                    f.write(binary_data)
 
         resource.attrs['src'] = "img/" + filename
 
@@ -215,7 +240,7 @@ def save_course(soup):
 
             r = a.s.get(url)
 
-            if r.status_code is not 200:
+            if r.status_code != 200:
                 continue
 
             from uuid import uuid4
@@ -261,7 +286,8 @@ def correct_extension_mimetype(ext):
         "html; charset=utf-8": "html",
         "x-ms-wmv": "wmv",
         "x-ms-wm": "avi",
-        "quicktime": "mov"
+        "quicktime": "mov",
+        "svg+xml": "svg"
     }
 
     if ext in mimetypes.keys():
@@ -284,3 +310,5 @@ if __name__ == "__main__":
 
     # Parse and save the main course page
     save_course(index_soup)
+
+    print("Complete!")
